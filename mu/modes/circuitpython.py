@@ -26,8 +26,10 @@ from mu.interface.panes import CHARTS
 from mu.logic import Device
 from adafruit_board_toolkit import circuitpython_serial
 
-logger = logging.getLogger(__name__)
+if os.name == "nt":
+    from mu.usb_descriptor_win32 import get_all_devices
 
+logger = logging.getLogger(__name__)
 
 class CircuitPythonMode(MicroPythonMode):
     """
@@ -279,6 +281,22 @@ class CircuitPythonMode(MicroPythonMode):
                 self.connected = False
             return wd
 
+    def _get_port_description(self, port):
+        if os.name == "nt":
+            description = port.device
+            try:
+                devices = get_all_devices()
+                for device in devices:
+                    if device.serial_number == port.serial_number:
+                        description = device.product
+                        break
+            # very broad exception because the call might encounter unexpected problems
+            except Exception:
+                pass
+        else:
+            description = port.description
+        return f"{description} - Circuitpython Board"
+
     def compatible_board(self, port):
         """Use adafruit_board_toolkit to find out whether a board is running
         CircuitPython. The toolkit sees if the CDC Interface name is appropriate.
@@ -294,6 +312,7 @@ class CircuitPythonMode(MicroPythonMode):
         # and see if any of their device names match the one passed in.
         for comport in circuitpython_serial.repl_comports():
             if comport.device == port_name:
+                description = self._get_port_description(comport)
                 return Device(
                     vid,
                     pid,
@@ -302,7 +321,7 @@ class CircuitPythonMode(MicroPythonMode):
                     manufacturer,
                     self.name,
                     self.short_name,
-                    port.description(),
+                    description,
                 )
         # No match.
         return None
